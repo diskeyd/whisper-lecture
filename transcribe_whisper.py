@@ -330,6 +330,13 @@ AUTH_ERROR_HINTS = (
 )
 # 맨 401만 인증 실패로 본다 — 소수점이 붙은 초 단위 로그("after 401.0s")를 오탐하지 않는다
 HTTP_401 = re.compile(r"(?<![\d.])401(?![\d.])")
+# 5xx 는 Google 쪽 일시 오류(2026-09-23 502) — 같은 요청을 다시 보내면 대개 된다
+HTTP_5XX = re.compile(r"(?<![\d.])5\d\d(?![\d.])")
+# 로그인 화면에서 권한을 일부만 고르면 기존 권한이 그걸로 통째로 바뀐다 → 지금 쓰는 5종을 명시
+GWS_SCOPES = ",".join(
+    f"https://www.googleapis.com/auth/{s}"
+    for s in ("drive", "calendar", "documents", "gmail.readonly", "spreadsheets")
+)
 
 
 def looks_like_auth_error(message):
@@ -357,7 +364,11 @@ def relogin(tool, message):
     """
     if not looks_like_auth_error(message):
         return False
-    login_cmd = ["gws", "auth", "login"] if tool == "gws" else ["notebooklm", "login"]
+    login_cmd = (
+        ["gws", "auth", "login", "--scopes", GWS_SCOPES]
+        if tool == "gws"
+        else ["notebooklm", "login"]
+    )
     joined = " ".join(login_cmd)
     if not sys.stdin.isatty():
         print(f"   ↳ {tool} 로그인이 풀렸습니다 — `{joined}` 후 --upload-only로 재시도")
@@ -422,7 +433,7 @@ def drive_existing_id(name):
     return files[0].get("id") if files else None
 
 
-def upload_to_drive(path, allow_relogin=True):
+def upload_to_drive(path, retry=True):
     """Drive 강의녹음 폴더에 올립니다. (file_id, 메모) / 실패 시 (None, 사유)."""
     existing = drive_existing_id(path.name)
     if existing:
@@ -442,17 +453,25 @@ def upload_to_drive(path, allow_relogin=True):
         DRIVE_TIMEOUT,
     )
     data = parse_json_output(out) or {}
+    code = ""
     if isinstance(data.get("error"), dict):
         # gws 는 message 가 빈 오류 JSON 을 낼 때가 있다. 예전에는 그 빈 값이 stderr 의
         # `error[...]` 줄을 덮어써서 사유가 공란으로 찍혔다(2026-09-22·23 두 번).
         e = data["error"]
+        code = str(e.get("code") or "")
         stderr_line = err if err.startswith("error") else ""  # `error[api]: …` 줄
         err = str(e.get("message") or e.get("reason") or stderr_line or e.get("code") or err)[:200]
         ok = False
     if not ok:
+        # 일시 오류면 한 번만 다시 올린다. 실제로는 올라갔는데 5xx 가 온 경우는
+        # 재시도 첫머리의 drive_existing_id 가 잡아서 두 번 올리지 않는다
+        if retry and HTTP_5XX.search(f"{code} {err}"):
+            print(f"   ↳ Drive 일시 오류({code or err}) — 10초 뒤 한 번 더 시도")
+            time.sleep(10)
+            return upload_to_drive(path, retry=False)
         # 토큰 만료라면 로그인만 다시 하고 업로드부터 이어간다 (전사는 재실행하지 않음)
-        if allow_relogin and relogin("gws", err):
-            return upload_to_drive(path, allow_relogin=False)
+        if retry and relogin("gws", err):
+            return upload_to_drive(path, retry=False)
         return None, err or "gws 가 사유 없이 실패"
     file_id = data.get("id") or (data.get("file") or {}).get("id")
     return (file_id, "업로드") if file_id else (None, "응답에 파일 id가 없습니다")
