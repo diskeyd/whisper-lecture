@@ -443,13 +443,17 @@ def upload_to_drive(path, allow_relogin=True):
     )
     data = parse_json_output(out) or {}
     if isinstance(data.get("error"), dict):
-        err = str(data["error"].get("message", ""))[:200]
+        # gws 는 message 가 빈 오류 JSON 을 낼 때가 있다. 예전에는 그 빈 값이 stderr 의
+        # `error[...]` 줄을 덮어써서 사유가 공란으로 찍혔다(2026-09-22·23 두 번).
+        e = data["error"]
+        stderr_line = err if err.startswith("error") else ""  # `error[api]: …` 줄
+        err = str(e.get("message") or e.get("reason") or stderr_line or e.get("code") or err)[:200]
         ok = False
     if not ok:
         # 토큰 만료라면 로그인만 다시 하고 업로드부터 이어간다 (전사는 재실행하지 않음)
         if allow_relogin and relogin("gws", err):
             return upload_to_drive(path, allow_relogin=False)
-        return None, err
+        return None, err or "gws 가 사유 없이 실패"
     file_id = data.get("id") or (data.get("file") or {}).get("id")
     return (file_id, "업로드") if file_id else (None, "응답에 파일 id가 없습니다")
 
@@ -916,7 +920,12 @@ def build_review_records(raw_snapshot, kept_segments, entries):
 
         avg_logprob = seg.get("avg_logprob")
         no_speech = seg.get("no_speech_prob")
-        if avg_logprob is not None and avg_logprob < REVIEW_LOGPROB_THRESHOLD:
+        # NaN 은 디코딩이 무너진 창이다(2026-09-23 알고리즘 34:47, 33초가 "그렇죠" 3개와
+        # 빈 세그먼트 70개로 남음). NaN 은 어떤 비교도 거짓이라 예전엔 가장 나쁜 구간이
+        # 플래그에서 빠졌다. 빈 텍스트까지 표시하면 교정 시트가 수십 줄로 넘치므로 글자가
+        # 남은 세그먼트만 — 그것만으로 그 구간이 시트 맨 앞에 올라온다.
+        collapsed = avg_logprob != avg_logprob and bool(text or raw_text)
+        if collapsed or (avg_logprob is not None and avg_logprob < REVIEW_LOGPROB_THRESHOLD):
             flags.append("low_logprob")
         if no_speech is not None and no_speech > REVIEW_NO_SPEECH_THRESHOLD:
             flags.append("maybe_silence")
