@@ -1,0 +1,28 @@
+[project]
+name = "whisper-lecture"
+version = "0.1.0"
+description = "Error-rate measurement for the lecture transcription pipeline"
+requires-python = ">=3.12"
+dependencies = [
+    "jiwer",
+    "rapidfuzz>=3.14.6",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["scripts"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+# The pipeline script under measurement lives here but is not repo code: it runs
+# under the global python3 (mlx-whisper), and its blind excepts are deliberate —
+# a failing sidecar must never turn a finished transcript into a failure.
+extend-exclude = ["transcribe_whisper.py"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = ["scripts"]

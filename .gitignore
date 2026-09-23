@@ -1,0 +1,14 @@
+# lecture audio, transcripts and references never go into the repository
+data/
+local/
+
+# python / tooling
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# local backups of the pipeline script
+*.bak-*
