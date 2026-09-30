@@ -21,6 +21,7 @@ Usage:
   python3 transcribe_whisper.py --carry-context --seed-glossary <audio>  # 용어 사전을 프롬프트로 심는다(실험용)
 
 출력: <stem>.md (전사문, 형식 불변) + <stem>.review.jsonl (세그먼트별 신뢰도·플래그 사이드카).
+      사이드카는 전사문 옆이 아니라 레포 data/review/<stem>.review.jsonl 에 쌓는다(미추적).
       사이드카는 한 줄 = 한 세그먼트. flags: low_logprob · maybe_silence · repetitive ·
       term_miss · disagree(2차 디코딩이 1차와 다름 → alt에 2차 결과). 본문은 자동으로 고치지 않는다.
 
@@ -1087,14 +1088,28 @@ def recheck_flagged(input_path, records, entries, language):
     return disagreements
 
 
+REVIEW_ROOT = Path(__file__).resolve().parent / "data" / "review"
+
+
+def sidecar_path(output_path):
+    """전사문에 딸린 사이드카 경로: 모든 실행이 레포 data/review/<stem>.review.jsonl 한 곳에 쌓는다.
+
+    볼트에는 사람이 읽을 전사문만 둔다(소유자 결정 2026-09-30). 같은 stem 을 다시 돌리면
+    전사문 .md 처럼 덮어쓴다 — 과목 stem 은 과목명·날짜를 품어 겹치지 않지만, 과목 미매칭
+    기본 이름('새로운 녹음 2')은 날짜가 달라도 겹칠 수 있다(전사문도 같은 이유로 덮인다).
+    """
+    return REVIEW_ROOT / (output_path.stem + ".review.jsonl")
+
+
 def write_review_jsonl(output_path, records):
-    """검토 레코드를 전사문 옆 <stem>.review.jsonl로 저장합니다.
+    """검토 레코드를 sidecar_path(output_path)에 저장합니다.
 
     JSONL인 이유: 한 줄 = 한 세그먼트라 grep·스트리밍 파싱이 되고,
     중간이 잘려도 나머지 줄이 살아 있으며, LLM에 그대로 먹이기 좋습니다.
     """
-    path = output_path.with_suffix(".review.jsonl")
+    path = sidecar_path(output_path)
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
             for rec in records:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")

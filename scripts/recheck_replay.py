@@ -10,7 +10,7 @@ module, so the call can be wrapped and its keyword arguments overridden. The
 flags from the original run are kept so every setting rechecks the same
 segments; only `alt` and the disagree/recheck_failed flags are stripped first.
 
-Output: <audio dir>/<audio stem>.<setting>.review.jsonl — outside the vault.
+Output: data/review/<audio stem>.<setting>.review.jsonl — see transcribe_whisper.sidecar_path.
 """
 
 import difflib

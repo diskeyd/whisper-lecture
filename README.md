@@ -37,7 +37,7 @@ uv run scripts/fetch.py s1-261 <folder_id> "260512 컴퓨터네트워크w11-1.m4
 # 2. 분 경계에서 5분 발췌 (ffprobe 로 300초 확인, 어긋나면 재인코딩)
 uv run scripts/make_excerpt.py s1-261 48
 
-# 3. 현재 파이프라인으로 재전사 — 업로드·삭제 금지 플래그는 필수
+# 3. 현재 파이프라인으로 재전사 — 업로드·삭제 금지 플래그는 필수 (사이드카는 data/review/<stem>.review.jsonl)
 cp data/excerpt/s1-261.excerpt.m4a data/hyp/s1-261.current.m4a
 python3 transcribe_whisper.py --no-upload --keep-audio --dump-json \
     data/hyp/s1-261.current.m4a </dev/null
@@ -46,7 +46,7 @@ python3 transcribe_whisper.py --no-upload --keep-audio --dump-json \
 uv run scripts/slice_transcript.py s1-261 "201.66 컴퓨터네트워크" "260512 컴퓨터네트워크w11-1.md"
 
 # 5. 교정 시트 만들기
-uv run scripts/review_sheet.py data/hyp/s1-261.current.review.jsonl
+uv run scripts/review_sheet.py data/review/s1-261.current.review.jsonl
 
 # 6. 정답본이 생긴 뒤 — 측정
 uv run scripts/cer.py data/gold/s1-261.md data/hyp/s1-261.current.md

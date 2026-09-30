@@ -1,7 +1,9 @@
 """Turn a .review.jsonl sidecar into a markdown correction sheet.
 
 Usage:
-  uv run scripts/review_sheet.py <stem>.current.review.jsonl
+  uv run scripts/review_sheet.py data/review/<stem>.current.review.jsonl
+
+Writes data/hyp/<stem>.sheet.md, next to the draft it annotates.
 
 Flagged segments first — those are where listening pays off — then the full
 draft, so the corrector can work top to bottom and save the result as
@@ -17,6 +19,8 @@ read.
 import json
 import sys
 from pathlib import Path
+
+HYP = Path(__file__).resolve().parent.parent / "data" / "hyp"
 
 FLAG_NOTE = {
     "low_logprob": "낮은 확신",
@@ -106,7 +110,7 @@ def main():
     records = load(path)
     if not records:
         raise SystemExit(f"no records in {path}")
-    out = path.with_name(f"{stem}.sheet.md")
+    out = HYP / f"{stem}.sheet.md"
     out.write_text(render(records, stem), encoding="utf-8")
     flagged = sum(1 for r in records if r.get("flags"))
     print(f"{out}: {len(records)} segments, {flagged} flagged")
