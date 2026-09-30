@@ -6,7 +6,7 @@ Lecture Transcription using Local MLX-Whisper on Apple Silicon
 1분 단위 타임스탬프 마크다운으로 Obsidian vault에 저장합니다.
 
 전사가 끝나면 원본 오디오를 Google Drive(강의녹음 폴더)와 과목별 NotebookLM
-노트북에 올리고, **둘 다 성공한 경우에만** 로컬 원본을 삭제합니다.
+노트북에 올리고, **Drive 업로드가 성공하고 NLM 소스가 ready 가 된 경우에만** 로컬 원본을 삭제합니다.
 NotebookLM 노트북이 없는 과목은 전사만 하고 두 업로드를 모두 건너뜁니다.
 (기존에 반복 task로 쪼개져 있던 전사·Drive 업로드·NLM 업로드를 한 번의 실행으로 합친 것)
 
@@ -105,7 +105,12 @@ AUDIO_MIME = {
 }
 
 DRIVE_TIMEOUT = 1800  # 40MB대 파일 업로드 여유
-NLM_TIMEOUT = 2400  # source add는 서버 처리(전사)까지 폴링하며 기다린다
+NLM_TIMEOUT = 2400  # source add는 업로드만 기다린다 — 서버 처리(ready)는 source wait가 따로 본다
+# ready 대기. 실측은 하나뿐이다: 43분·21.8 MB m4a(2026-09-30)가 올린 뒤 몇 분 안에 ready 로 보였다
+# (처리 시간 자체는 기록된 적 없음 — 상한만 안다). 상한을 넘기면 원본을 남기고 --upload-only 가
+# 같은 소스를 다시 기다리므로, 짧게 잡아도 안전하다.
+NLM_READY_TIMEOUT = 600
+NLM_READY_INTERVAL = 15
 NLM_REQUEST_TIMEOUT = "900"  # CLI 자체의 HTTP 타임아웃(기본 30초는 대용량에 부족)
 
 GROUP_SECONDS = 60  # 출력 타임스탬프를 묶는 단위(초)
@@ -495,8 +500,8 @@ def upload_to_notebooklm(path, uuid, allow_relogin=True):
                 return src.get("id"), "이미 있음"
             if status == "error":
                 break  # 실패한 소스는 남아 있어도 없는 셈 치고 다시 올린다
-            # processing 등 미완료 — 다시 올리지도, 원본을 지우지도 않는다
-            return None, f"NLM 처리 중({status}) — 잠시 후 --upload-only로 재시도"
+            # processing 등 미완료 — 다시 올리지 않고 ready 를 기다린다
+            return wait_until_ready(src.get("id"), uuid, "이미 있음")
 
     mime = (
         AUDIO_MIME.get(path.suffix.lower())
@@ -531,7 +536,41 @@ def upload_to_notebooklm(path, uuid, allow_relogin=True):
             return upload_to_notebooklm(path, uuid, allow_relogin=False)
         return None, err
     source_id = (data.get("source") or {}).get("id")
-    return (source_id, "업로드") if source_id else (None, "응답에 source id가 없습니다")
+    if not source_id:
+        return None, "응답에 source id가 없습니다"
+    return wait_until_ready(source_id, uuid, "업로드")
+
+
+def wait_until_ready(source_id, uuid, note):
+    """소스가 ready 가 될 때까지 기다립니다. (source_id, 메모) / 아니면 (None, 사유).
+
+    source add 는 업로드가 끝나면 돌아오고 서버 처리는 그 뒤에 이어지므로, id 만으로는
+    원본을 지울 근거가 되지 않는다. ready 가 아니면 원본을 남긴다.
+    """
+    # ponytail: 배치는 파일마다 여기서 최대 NLM_READY_TIMEOUT 만큼 멈춘다. 배치가 길어지면
+    # 대기 소스를 모아 배치 끝에서 한 번에 기다리도록 바꾼다.
+    _, out, err = run_cli(
+        [
+            "notebooklm",
+            "source",
+            "wait",
+            source_id,
+            "-n",
+            uuid,
+            "--timeout",
+            str(NLM_READY_TIMEOUT),
+            "--interval",
+            str(NLM_READY_INTERVAL),
+            "--json",
+        ],
+        NLM_READY_TIMEOUT + 120,  # CLI 가 먼저 끝나야 timeout 결과(JSON)를 읽는다
+    )
+    status = (parse_json_output(out) or {}).get("status")
+    if status == "ready":
+        return source_id, note
+    if status == "timeout":
+        return None, f"NLM 처리 중({NLM_READY_TIMEOUT}초 초과) — 잠시 후 --upload-only로 재시도"
+    return None, f"NLM 처리 실패({status or err or '응답 없음'})"
 
 
 def dispatch_audio(input_path, course_id, keep_audio=False):
