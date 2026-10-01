@@ -12,8 +12,8 @@ NotebookLM 노트북이 없는 과목은 전사만 하고 두 업로드를 모�
 
 Usage:
   python3 transcribe_whisper.py "~/Downloads/260303 컴퓨터네트워크w1-1.m4a"
-  python3 transcribe_whisper.py                       # 인자 없음 → iCloud 음성메모 목록에서 골라 ~/Downloads 로 복사 후 전사
-                                                      #   (터미널 앱에 전체 디스크 접근 권한 필요)
+  python3 transcribe_whisper.py "<제목>(1).m4a" "<제목>(2).m4a"  # 나뉜 녹음 → <제목>.m4a 로 병합해 한 번 전사
+                                                      #   (업로드 뒤 병합본과 함께 파트도 삭제)
   python3 transcribe_whisper.py --dump-json <audio>   # 후처리 전 Whisper 세그먼트 JSON 보존(디버그)
   python3 transcribe_whisper.py --no-upload <audio>   # 전사만 (업로드·삭제 없음)
   python3 transcribe_whisper.py --keep-audio <audio>  # 업로드는 하되 원본은 남김
@@ -37,8 +37,6 @@ Usage:
 import re
 import sys
 import json
-import sqlite3
-import datetime
 import time
 import shutil
 import tempfile
@@ -62,12 +60,6 @@ VAULT_ROOT = Path(
     "<WIKI_VAULT>"
 )
 FILES_ROOT = VAULT_ROOT / "10. Raw Sources"
-
-# 아이폰 음성메모가 iCloud 로 내려오는 곳. 파일명은 ID(`YYYYMMDD HHMMSS-XXXXXXXX.m4a`)고
-# 제목은 CloudRecordings.db 에만 있다. iCloud 가 관리하는 폴더라 여기서는 읽기만 한다.
-VOICE_MEMOS_DIR = (
-    Path.home() / "Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
-)
 
 COURSE_MAP = {
     "네트워크보안": "201.59 네트워크보안",
@@ -225,56 +217,83 @@ def choose_language(name=None):
     return "ko"
 
 
-def pick_voice_memos(limit=20):
-    """인자 없이 실행했을 때 iCloud 음성메모 목록에서 골라 ~/Downloads 로 복사한 경로들을 돌려줍니다.
+SPLIT_PART = re.compile(r"^(.*?)\s*\((\d+)\)$")
 
-    원본은 Voice Memos 가 관리하므로 복사만 한다 — 업로드 뒤 지워지는 건 복사본뿐이다.
-    ZPATH 가 NULL 인 행은 녹음 중이거나 아직 동기화 전이라 빼고, ZEVICTIONDATE 가 있는 행은
-    "최근 삭제된 항목"(삭제 시각이 들어간다, 2026-10-01 실측)이라 뺀다.
+
+def group_split_parts(picked, listed):
+    """넘긴 stem 들을 [(출력 stem, [stem…])] 로 묶고, 같이 넘기지 않은 나머지 파트 stem 을 돌려줍니다.
+
+    `w5(1)`·`w5(2)` 처럼 번호만 다른 녹음을 둘 이상 넘기면 번호순으로 한 묶음(`w5`)이 된다.
     """
-    try:
-        con = sqlite3.connect(f"file:{VOICE_MEMOS_DIR / 'CloudRecordings.db'}?mode=ro", uri=True)
-        rows = con.execute(
-            "SELECT ZENCRYPTEDTITLE, ZPATH, ZDURATION, ZDATE FROM ZCLOUDRECORDING "
-            "WHERE ZPATH IS NOT NULL AND ZEVICTIONDATE IS NULL ORDER BY ZDATE DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
-    except (sqlite3.OperationalError, PermissionError) as e:
-        print(f"❌ 음성메모 목록을 읽지 못했습니다 — {e}")
-        print("   터미널 앱에 전체 디스크 접근 권한이 필요합니다 (시스템 설정 → 개인정보 보호 및 보안).")
-        sys.exit(1)
-
-    print("\n🎙  iCloud 음성메모 (최신순):")
-    for i, (title, path, dur, date) in enumerate(rows, 1):
-        when = datetime.datetime.fromtimestamp(date + 978307200)  # Core Data epoch(2001-01-01)
-        missing = "" if (VOICE_MEMOS_DIR / path).exists() else "  (미다운로드 — Voice Memos 에서 열어 받으세요)"
-        print(f"  {i:2d}. {when:%m-%d %H:%M}  {int(dur or 0) // 60:3d}m  {title}{missing}")
-    try:
-        answer = input("번호 (쉼표로 여러 개, Enter = 종료): ").strip()
-    except (KeyboardInterrupt, EOFError):
-        answer = ""
-    if not answer:
-        sys.exit(0)
-
-    picked = []
-    for token in answer.split(","):
-        if not token.strip().isdigit() or not 1 <= int(token) <= len(rows):
-            print(f"잘못된 번호: {token.strip()}")
-            sys.exit(1)
-        title, path, _, _ = rows[int(token) - 1]
-        src = VOICE_MEMOS_DIR / path
-        if not src.exists():
-            print(f"아직 내려오지 않은 녹음입니다: {title}")
-            sys.exit(1)
-        name = unicodedata.normalize("NFC", title).replace("/", "-")
-        dst = Path.home() / "Downloads" / f"{name}{src.suffix}"
-        if not dst.exists() or dst.stat().st_size != src.stat().st_size:
-            shutil.copy2(src, dst)
-            print(f"   📋 복사: {dst}")
+    groups = {}
+    for stem in picked:
+        m = SPLIT_PART.match(stem)
+        key = (m.group(1), True) if m else (stem, False)
+        groups.setdefault(key, []).append(stem)
+    out, missing = [], []
+    for (base, numbered), parts in groups.items():
+        if numbered and len(parts) > 1:
+            parts.sort(key=lambda t: int(SPLIT_PART.match(t).group(2)))
+            out.append((base, parts))
         else:
-            print(f"   📋 이미 있음: {dst}")
-        picked.append(dst)
-    return picked
+            out.extend((t, [t]) for t in parts)
+        if numbered:
+            missing += [
+                t
+                for t in listed
+                if t not in parts and (m := SPLIT_PART.match(t)) and m.group(1) == base
+            ]
+    return out, missing
+
+
+def merge_split_recordings(paths):
+    """나뉜 녹음(`w5(1)`·`w5(2)`)을 같은 폴더의 `w5.m4a` 하나로 합칩니다. {처리할 경로: [파트 경로…]}.
+
+    따로 돌리면 볼트 전사문이 갈라진다. 같이 넘기지 않은 파트가 같은 폴더에 있으면 경고하고 묻는다.
+    """
+    by_stem = {unicodedata.normalize("NFC", p.stem): p for p in paths}
+    listed = sorted(
+        {unicodedata.normalize("NFC", q.stem) for p in paths for q in p.parent.glob(f"*{p.suffix}")}
+    )
+    groups, left_out = group_split_parts(list(by_stem), listed)
+    if left_out:
+        print(f"⚠️  같이 넘기지 않은 파트: {', '.join(left_out)} — 따로 돌리면 전사문이 갈라집니다.")
+        try:
+            answer = input("이대로 진행할까요? [y/N]: ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            answer = ""
+        if answer != "y":
+            sys.exit(1)
+
+    merged = {}
+    for name, stems in groups:
+        parts = [by_stem[s] for s in stems]
+        if len(parts) == 1:
+            merged[parts[0]] = parts
+            continue
+        dst = parts[0].with_name(f"{name}{parts[0].suffix}")
+        if dst.exists():
+            print(f"❌ 병합본 자리에 이미 파일이 있습니다: {dst} — 그 파일을 직접 넘기세요.")
+            sys.exit(1)
+        # 임시 이름에 써서 옮긴다 — 중간에 끊긴 병합본이 남아 위의 검사에 걸리지 않게
+        tmp = dst.with_name(f".{dst.stem}.merging{dst.suffix}")
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
+            for part in parts:
+                f.write("file '" + str(part).replace("'", "'\\''") + "'\n")
+        proc = subprocess.run(
+            ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "concat", "-safe", "0",
+             "-i", f.name, "-c", "copy", str(tmp)],
+            capture_output=True, text=True,
+        )
+        Path(f.name).unlink()
+        if proc.returncode != 0:
+            tmp.unlink(missing_ok=True)
+            print(f"❌ 병합 실패({' + '.join(stems)}): {proc.stderr.strip()[-200:]}")
+            sys.exit(1)
+        tmp.rename(dst)
+        print(f"🔗 병합: {' + '.join(stems)} → {dst.name}")
+        merged[dst] = parts
+    return merged
 
 
 def check_dependencies():
@@ -1411,8 +1430,6 @@ def main():
     if flags["--upload-only"] and flags["--no-upload"]:
         print("Error: --upload-only와 --no-upload는 같이 쓸 수 없습니다.")
         sys.exit(1)
-    if not args and sys.stdin.isatty() and not flags["--upload-only"]:
-        args = [str(p) for p in pick_voice_memos()]
     if not args:
         print(
             "Usage: python3 transcribe_whisper.py "
@@ -1444,6 +1461,11 @@ def main():
             print(f"File not found: {p}")
             sys.exit(1)
         input_paths.append(p)
+
+    parts_of = {p: [p] for p in input_paths}
+    if not flags["--upload-only"]:
+        parts_of = merge_split_recordings(input_paths)
+        input_paths = list(parts_of)
 
     print(f"\n🗂  Files to process: {len(input_paths)}")
 
@@ -1485,6 +1507,12 @@ def main():
                 carry_context=flags["--carry-context"],
                 seed_glossary=flags["--seed-glossary"],
             )
+            # 병합본이 지워졌다 = Drive ✅ · NLM ready (dispatch_audio 의 삭제 조건) → 파트도 같이 정리
+            parts = parts_of[input_path]
+            if len(parts) > 1 and not input_path.exists():
+                for part in parts:
+                    part.unlink(missing_ok=True)
+                note += f" · 파트 {len(parts)}개 삭제"
 
         audio_notes.append((input_path.name, note))
         if success:
