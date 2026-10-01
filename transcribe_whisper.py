@@ -12,6 +12,8 @@ NotebookLM 노트북이 없는 과목은 전사만 하고 두 업로드를 모�
 
 Usage:
   python3 transcribe_whisper.py "~/Downloads/260303 컴퓨터네트워크w1-1.m4a"
+  python3 transcribe_whisper.py                       # 인자 없음 → iCloud 음성메모 목록에서 골라 ~/Downloads 로 복사 후 전사
+                                                      #   (터미널 앱에 전체 디스크 접근 권한 필요)
   python3 transcribe_whisper.py --dump-json <audio>   # 후처리 전 Whisper 세그먼트 JSON 보존(디버그)
   python3 transcribe_whisper.py --no-upload <audio>   # 전사만 (업로드·삭제 없음)
   python3 transcribe_whisper.py --keep-audio <audio>  # 업로드는 하되 원본은 남김
@@ -35,6 +37,8 @@ Usage:
 import re
 import sys
 import json
+import sqlite3
+import datetime
 import time
 import shutil
 import tempfile
@@ -58,6 +62,12 @@ VAULT_ROOT = Path(
     "<WIKI_VAULT>"
 )
 FILES_ROOT = VAULT_ROOT / "10. Raw Sources"
+
+# 아이폰 음성메모가 iCloud 로 내려오는 곳. 파일명은 ID(`YYYYMMDD HHMMSS-XXXXXXXX.m4a`)고
+# 제목은 CloudRecordings.db 에만 있다. iCloud 가 관리하는 폴더라 여기서는 읽기만 한다.
+VOICE_MEMOS_DIR = (
+    Path.home() / "Library/Group Containers/group.com.apple.VoiceMemos.shared/Recordings"
+)
 
 COURSE_MAP = {
     "네트워크보안": "201.59 네트워크보안",
@@ -213,6 +223,58 @@ def choose_language(name=None):
     if choice == "4" and name is None:
         return "PER_FILE"
     return "ko"
+
+
+def pick_voice_memos(limit=20):
+    """인자 없이 실행했을 때 iCloud 음성메모 목록에서 골라 ~/Downloads 로 복사한 경로들을 돌려줍니다.
+
+    원본은 Voice Memos 가 관리하므로 복사만 한다 — 업로드 뒤 지워지는 건 복사본뿐이다.
+    ZPATH 가 NULL 인 행은 녹음 중이거나 아직 동기화 전이라 빼고, ZEVICTIONDATE 가 있는 행은
+    "최근 삭제된 항목"(삭제 시각이 들어간다, 2026-10-01 실측)이라 뺀다.
+    """
+    try:
+        con = sqlite3.connect(f"file:{VOICE_MEMOS_DIR / 'CloudRecordings.db'}?mode=ro", uri=True)
+        rows = con.execute(
+            "SELECT ZENCRYPTEDTITLE, ZPATH, ZDURATION, ZDATE FROM ZCLOUDRECORDING "
+            "WHERE ZPATH IS NOT NULL AND ZEVICTIONDATE IS NULL ORDER BY ZDATE DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    except (sqlite3.OperationalError, PermissionError) as e:
+        print(f"❌ 음성메모 목록을 읽지 못했습니다 — {e}")
+        print("   터미널 앱에 전체 디스크 접근 권한이 필요합니다 (시스템 설정 → 개인정보 보호 및 보안).")
+        sys.exit(1)
+
+    print("\n🎙  iCloud 음성메모 (최신순):")
+    for i, (title, path, dur, date) in enumerate(rows, 1):
+        when = datetime.datetime.fromtimestamp(date + 978307200)  # Core Data epoch(2001-01-01)
+        missing = "" if (VOICE_MEMOS_DIR / path).exists() else "  (미다운로드 — Voice Memos 에서 열어 받으세요)"
+        print(f"  {i:2d}. {when:%m-%d %H:%M}  {int(dur or 0) // 60:3d}m  {title}{missing}")
+    try:
+        answer = input("번호 (쉼표로 여러 개, Enter = 종료): ").strip()
+    except (KeyboardInterrupt, EOFError):
+        answer = ""
+    if not answer:
+        sys.exit(0)
+
+    picked = []
+    for token in answer.split(","):
+        if not token.strip().isdigit() or not 1 <= int(token) <= len(rows):
+            print(f"잘못된 번호: {token.strip()}")
+            sys.exit(1)
+        title, path, _, _ = rows[int(token) - 1]
+        src = VOICE_MEMOS_DIR / path
+        if not src.exists():
+            print(f"아직 내려오지 않은 녹음입니다: {title}")
+            sys.exit(1)
+        name = unicodedata.normalize("NFC", title).replace("/", "-")
+        dst = Path.home() / "Downloads" / f"{name}{src.suffix}"
+        if not dst.exists() or dst.stat().st_size != src.stat().st_size:
+            shutil.copy2(src, dst)
+            print(f"   📋 복사: {dst}")
+        else:
+            print(f"   📋 이미 있음: {dst}")
+        picked.append(dst)
+    return picked
 
 
 def check_dependencies():
@@ -1349,6 +1411,8 @@ def main():
     if flags["--upload-only"] and flags["--no-upload"]:
         print("Error: --upload-only와 --no-upload는 같이 쓸 수 없습니다.")
         sys.exit(1)
+    if not args and sys.stdin.isatty() and not flags["--upload-only"]:
+        args = [str(p) for p in pick_voice_memos()]
     if not args:
         print(
             "Usage: python3 transcribe_whisper.py "

@@ -18,6 +18,10 @@
 `pyproject.toml` 에 `mlx-whisper` 를 추가하지 마세요. 전사 스크립트는 이 레포에 있지만
 레포의 venv 와는 무관하게 돌아갑니다 (ruff 검사에서도 제외되어 있습니다).
 
+인자 없이 `python3 transcribe_whisper.py` 만 실행하면 iCloud 음성메모 목록(최신 20개)에서 골라
+`~/Downloads/<제목>.m4a` 로 복사한 뒤 전사합니다. 원본은 음성메모에 남고, 업로드 뒤 지워지는 건 복사본입니다.
+터미널 앱에 **전체 디스크 접근 권한**이 없으면 목록을 읽지 못합니다 (시스템 설정 → 개인정보 보호 및 보안).
+
 ## 지표
 
 모두 `unicodedata.normalize("NFC", …)` 이후에 계산합니다. macOS·iCloud 가 한글을 NFD 로
