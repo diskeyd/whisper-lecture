@@ -21,6 +21,7 @@ Usage (mlx-whisper 는 brew python@3.14 에만 있다 — 기본 python3 은 3.1
   python3.14 transcribe_whisper.py --recheck <audio>     # 저신뢰 구간을 2차 디코딩해 사이드카에 대조(발췌 교정용)
   python3.14 transcribe_whisper.py --carry-context <audio>  # 창 간 문맥 유지(실험용 — 용어 표기 유지 vs 반복 환각)
   python3.14 transcribe_whisper.py --carry-context --seed-glossary <audio>  # 용어 사전을 프롬프트로 심는다(실험용)
+  python3.14 transcribe_whisper.py --plan <audio> [audio2 ...]  # course, transcript folder and uploads as JSON lines; audio untouched
 
 출력: <stem>.md (전사문, 형식 불변) + <stem>.review.jsonl (세그먼트별 신뢰도·플래그 사이드카).
       사이드카는 전사문 옆이 아니라 레포 data/review/<stem>.review.jsonl 에 쌓는다(미추적).
@@ -44,6 +45,13 @@ import mimetypes
 import subprocess
 import unicodedata
 from pathlib import Path
+
+if __name__ == "__main__" and "--plan" in sys.argv[1:]:
+    # --plan never transcribes, and importing mlx initialises Metal (slow, and fails without
+    # a GPU), so a stub stands in for it, as the tests do.
+    import types
+
+    sys.modules["mlx_whisper"] = types.ModuleType("mlx_whisper")
 
 try:
     import mlx_whisper
@@ -1211,18 +1219,60 @@ def resolve_output_path(input_path, create_dir=True):
     create_dir=False는 경로만 계산합니다 — 전사하지 않는 --upload-only에서 빈 과목
     폴더를 vault에 만들지 않기 위해서입니다.
     """
-    course = detect_course(input_path.name)
-    if course:
-        course_id = COURSE_MAP[course]
-        output_dir = FILES_ROOT / course_id
+    course_id, output_dir = route(input_path)
+    if course_id:
         if create_dir:
             output_dir.mkdir(parents=True, exist_ok=True)
         print(f"\n📚 Course   : {course_id}")
     else:
-        course_id = None
-        output_dir = input_path.parent
         print("\n📚 Course   : 매칭 없음 (입력 파일과 같은 폴더에 저장)")
     return output_dir / (input_path.stem + ".md"), course_id
+
+
+def route(input_path):
+    """(course ID or None, transcript folder) for a recording, from its file name alone."""
+    course = detect_course(input_path.name)
+    if course:
+        return COURSE_MAP[course], FILES_ROOT / COURSE_MAP[course]
+    return None, input_path.parent
+
+
+def plan_rows(args):
+    """What a run would do with each recording, touching no audio and creating nothing.
+
+    One dict per transcript: split parts passed together count as their merged file, named as
+    merge_split_recordings names it. notebook says whether the uploads would be tried; it is
+    None when the Subject notes cannot be listed, so an unreadable vault never reads as
+    "no notebook".
+    """
+    paths = {unicodedata.normalize("NFC", Path(a).expanduser().stem): a for a in args}
+    groups, _ = group_split_parts(list(paths), [])
+    try:
+        next(SUBJECT_DIR.iterdir(), None)
+        readable = True
+    except OSError:
+        readable = False
+    rows = []
+    for name, stems in groups:
+        first = Path(paths[stems[0]]).expanduser()
+        merged = first.with_name(name + first.suffix)
+        course_id, dest = route(merged)
+        if course_id is None:
+            notebook = False
+        elif readable:
+            notebook = find_notebook_uuid(course_id)[0] is not None
+        else:
+            notebook = None
+        rows.append(
+            {
+                "files": [paths[s] for s in stems],
+                "name": unicodedata.normalize("NFC", merged.name),
+                "course": course_id,
+                "dest": unicodedata.normalize("NFC", str(dest)),
+                "notebook": notebook,
+            }
+        )
+    return rows
 
 
 def transcribe_file(
@@ -1423,11 +1473,17 @@ def main():
         "--recheck": False,
         "--carry-context": False,
         "--seed-glossary": False,
+        "--plan": False,
     }
     for flag in flags:
         if flag in args:
             flags[flag] = True
     args = [a for a in args if a not in flags]
+    if flags["--plan"]:
+        # One JSON line per transcript (plan_rows); ASCII so a caller's locale cannot garble names.
+        for row in plan_rows(args):
+            print(json.dumps(row, ensure_ascii=True))
+        return
     if flags["--upload-only"] and flags["--no-upload"]:
         print("Error: --upload-only와 --no-upload는 같이 쓸 수 없습니다.")
         sys.exit(1)
