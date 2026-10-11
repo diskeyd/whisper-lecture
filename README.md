@@ -12,7 +12,7 @@
 
 | 무엇 | 실행 | 이유 |
 |---|---|---|
-| `transcribe_whisper.py` (전사) | 전역 `python3` | `mlx-whisper` 가 `pip --break-system-packages` 로 전역에 깔려 있습니다. venv 에 넣지 않습니다 |
+| `transcribe_whisper.py` (전사) | brew `python3.14` | `mlx-whisper` 가 brew python@3.14 에 `pip --break-system-packages` 로 깔려 있습니다 (2026-10-10 부터 기본 `python3` 은 3.15 라 패키지가 없습니다). venv 에 넣지 않습니다 |
 | `scripts/*.py` (측정) | `uv run` | 런타임 의존성은 `jiwer` 하나뿐입니다 |
 
 `pyproject.toml` 에 `mlx-whisper` 를 추가하지 마세요. 전사 스크립트는 이 레포에 있지만
@@ -44,7 +44,7 @@ uv run scripts/make_excerpt.py s1-261 48
 
 # 3. 현재 파이프라인으로 재전사 — 업로드·삭제 금지 플래그는 필수 (사이드카는 data/review/<stem>.review.jsonl)
 cp data/excerpt/s1-261.excerpt.m4a data/hyp/s1-261.current.m4a
-python3 transcribe_whisper.py --no-upload --keep-audio --dump-json \
+python3.14 transcribe_whisper.py --no-upload --keep-audio --dump-json \
     data/hyp/s1-261.current.m4a </dev/null
 
 # 4. 26-1 샘플은 출고본의 같은 구간도 잘라낸다 (볼트는 읽기 전용)

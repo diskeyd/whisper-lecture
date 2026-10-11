@@ -1,8 +1,8 @@
 """Check that each verification clip really holds the word it was cut for, and recut the ones that do not.
 
-Usage (global python3 — mlx-whisper lives there, not in the repo venv):
-  python3 scripts/clip_check.py check <clip dir> [work dir]
-  python3 scripts/clip_check.py recut <clip dir> [work dir]
+Usage (brew python3.14 — mlx-whisper lives there, not in the repo venv nor the default python3 3.15):
+  python3.14 scripts/clip_check.py check <clip dir> [work dir]
+  python3.14 scripts/clip_check.py recut <clip dir> [work dir]
 
 The clips were cut at the one-minute block stamps of the shipped vault
 transcripts, and those clocks drift — up to 3 min 17 s over a 48 min lecture
@@ -142,7 +142,7 @@ def judge(hay, lo, hi, cand):
 
 
 def transcribe(path):
-    import mlx_whisper  # type: ignore[import-not-found]  # global python3 only; the repo venv has no mlx
+    import mlx_whisper  # type: ignore[import-not-found]  # brew python3.14 only; the repo venv has no mlx
 
     return mlx_whisper.transcribe(
         str(path),

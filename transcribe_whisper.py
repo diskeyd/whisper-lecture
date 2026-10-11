@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/opt/python@3.14/bin/python3.14
 """
 Lecture Transcription using Local MLX-Whisper on Apple Silicon
 
@@ -10,17 +10,17 @@ Lecture Transcription using Local MLX-Whisper on Apple Silicon
 NotebookLM 노트북이 없는 과목은 전사만 하고 두 업로드를 모두 건너뜁니다.
 (기존에 반복 task로 쪼개져 있던 전사·Drive 업로드·NLM 업로드를 한 번의 실행으로 합친 것)
 
-Usage:
-  python3 transcribe_whisper.py "~/Downloads/260303 컴퓨터네트워크w1-1.m4a"
-  python3 transcribe_whisper.py "<제목>(1).m4a" "<제목>(2).m4a"  # 나뉜 녹음 → <제목>.m4a 로 병합해 한 번 전사
-                                                      #   (업로드 뒤 병합본과 함께 파트도 삭제)
-  python3 transcribe_whisper.py --dump-json <audio>   # 후처리 전 Whisper 세그먼트 JSON 보존(디버그)
-  python3 transcribe_whisper.py --no-upload <audio>   # 전사만 (업로드·삭제 없음)
-  python3 transcribe_whisper.py --keep-audio <audio>  # 업로드는 하되 원본은 남김
-  python3 transcribe_whisper.py --upload-only <audio> # 전사 건너뛰고 업로드·삭제만 (재시도용)
-  python3 transcribe_whisper.py --recheck <audio>     # 저신뢰 구간을 2차 디코딩해 사이드카에 대조(발췌 교정용)
-  python3 transcribe_whisper.py --carry-context <audio>  # 창 간 문맥 유지(실험용 — 용어 표기 유지 vs 반복 환각)
-  python3 transcribe_whisper.py --carry-context --seed-glossary <audio>  # 용어 사전을 프롬프트로 심는다(실험용)
+Usage (mlx-whisper 는 brew python@3.14 에만 있다 — 기본 python3 은 3.15 라 없음):
+  python3.14 transcribe_whisper.py "~/Downloads/260303 컴퓨터네트워크w1-1.m4a"
+  python3.14 transcribe_whisper.py "<제목>(1).m4a" "<제목>(2).m4a"  # 나뉜 녹음 → <제목>.m4a 로 병합해 한 번 전사
+                                                        #   (업로드 뒤 병합본과 함께 파트도 삭제)
+  python3.14 transcribe_whisper.py --dump-json <audio>   # 후처리 전 Whisper 세그먼트 JSON 보존(디버그)
+  python3.14 transcribe_whisper.py --no-upload <audio>   # 전사만 (업로드·삭제 없음)
+  python3.14 transcribe_whisper.py --keep-audio <audio>  # 업로드는 하되 원본은 남김
+  python3.14 transcribe_whisper.py --upload-only <audio> # 전사 건너뛰고 업로드·삭제만 (재시도용)
+  python3.14 transcribe_whisper.py --recheck <audio>     # 저신뢰 구간을 2차 디코딩해 사이드카에 대조(발췌 교정용)
+  python3.14 transcribe_whisper.py --carry-context <audio>  # 창 간 문맥 유지(실험용 — 용어 표기 유지 vs 반복 환각)
+  python3.14 transcribe_whisper.py --carry-context --seed-glossary <audio>  # 용어 사전을 프롬프트로 심는다(실험용)
 
 출력: <stem>.md (전사문, 형식 불변) + <stem>.review.jsonl (세그먼트별 신뢰도·플래그 사이드카).
       사이드카는 전사문 옆이 아니라 레포 data/review/<stem>.review.jsonl 에 쌓는다(미추적).
@@ -49,7 +49,8 @@ try:
     import mlx_whisper
 except ImportError:
     print(
-        "Error: mlx-whisper is not installed. Run 'pip install mlx-whisper mlx --break-system-packages'"
+        "Error: mlx-whisper is not installed. Run it with python3.14 (brew python@3.14 holds mlx-whisper), or: "
+        "python3.14 -m pip install mlx-whisper mlx --break-system-packages"
     )
     sys.exit(1)
 
@@ -1432,7 +1433,7 @@ def main():
         sys.exit(1)
     if not args:
         print(
-            "Usage: python3 transcribe_whisper.py "
+            "Usage: python3.14 transcribe_whisper.py "
             "[--dump-json] [--no-upload] [--keep-audio] [--upload-only] [--recheck] "
             "[--carry-context] [--seed-glossary] "
             "<audio.m4a> [audio2.m4a ...]"

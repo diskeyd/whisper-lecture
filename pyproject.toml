@@ -18,7 +18,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 # The pipeline script under measurement lives here but is not repo code: it runs
-# under the global python3 (mlx-whisper), and its blind excepts are deliberate —
+# under brew python3.14 (mlx-whisper), and its blind excepts are deliberate —
 # a failing sidecar must never turn a finished transcript into a failure.
 extend-exclude = ["transcribe_whisper.py"]
 

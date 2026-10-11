@@ -1,10 +1,10 @@
 """Re-run only the recheck stage of transcribe_whisper.py under candidate settings.
 
 Usage:
-  python3 scripts/recheck_replay.py <audio> <sidecar.review.jsonl> <course_id> <setting> ...
-  python3 scripts/recheck_replay.py --summary <sidecar.review.jsonl> ...
+  python3.14 scripts/recheck_replay.py <audio> <sidecar.review.jsonl> <course_id> <setting> ...
+  python3.14 scripts/recheck_replay.py --summary <sidecar.review.jsonl> ...
 
-Runs under the global python3 (mlx-whisper), like clip_check.py. The pipeline
+Runs under brew python3.14 (mlx-whisper), like clip_check.py. The pipeline
 file is not edited: recheck_flagged() calls mlx_whisper.transcribe through the
 module, so the call can be wrapped and its keyword arguments overridden. The
 flags from the original run are kept so every setting rechecks the same
