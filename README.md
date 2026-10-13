@@ -163,6 +163,7 @@ uv run scripts/run_report.py
 |---|---|
 | `scripts/snr_probe.py <파일\|폴더> …` | 녹음을 말소리 대 바닥 소음(dB)으로 정렬 — 발췌 표본 고르기. 잔향은 재지 않음 |
 | `scripts/judge_sheet.py make\|score <stem>…` | 두 전사가 다른 구간만 나란히 놓은 판정표를 만들고(`data/judge/`), 들은 판정으로 승률·CER 을 냄 — 정답본 편향 없이 엔진 비교 |
+| `scripts/post_edit.py <전사문.md> ["과목 ID"]` | 치환 뒤 남은 오인식을 Opus(`claude -p`, 도구 없음)가 고침. 원본은 두고 `.post.md` 와 변경 이력 `.post.tsv` 를 씀. 블록 안에서 한 번만 나오는 조각만 바꿈 |
 | `scripts/device_diff.py` | 같은 강의를 두 기기로 녹음한 전사의 차이 구간 목록 (기기 쌍 비교) |
 | `python3.14 scripts/clip_check.py check\|recut <폴더>` | 검증 클립에 대상 단어가 실제로 들었는지 확인하고 다시 자름 |
 | `python3.14 scripts/recheck_replay.py` | `--recheck` 단계만 다른 설정으로 다시 돌려 비교 |
@@ -174,7 +175,7 @@ uv run pytest
 ```
 
 지표(`cer`, `term_error`, `textnorm`, 별칭, `replace_guarded`), `review_sheet`, `slice_transcript` 정렬,
-`mine_variants`, `fetch`, `clip_check`, `device_diff`, `judge_sheet`, 그리고 전사 스크립트의 업로드·삭제 조건, 사이드카 경로,
+`mine_variants`, `fetch`, `clip_check`, `device_diff`, `judge_sheet`, `post_edit` 의 수정 적용 규칙, 그리고 전사 스크립트의 업로드·삭제 조건, 사이드카 경로,
 파트 묶기·병합, `--plan` 을 덮습니다(전사 스크립트 테스트는 `mlx_whisper` 를 스텁으로 바꿔 끼웁니다).
 전사·반복 필터 본체, `fix_terms.py` CLI, `run_report.py`, `make_excerpt.py`, `snr_probe.py`, `recheck_replay.py` 는
 테스트가 없습니다.
