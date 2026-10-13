@@ -1,4 +1,4 @@
-# 강의 용어 사전 — transcribe_whisper.py 와 scripts/term_error.py 가 함께 읽는 파일
+# 강의 용어 사전 — transcribe_whisper.py(치환), scripts/term_error.py, fix_terms.py, mine_variants.py 가 읽는 파일
 #
 # 형식 (탭 구분, '#' 은 주석):
 #   정답 용어<TAB>오답1|오답2<TAB>과목 ID (선택, 비면 전 과목 공통)
@@ -9,10 +9,10 @@
 #   (20. Literature Notes / 30. Permanent Notes).
 #   '배열·원소·버퍼·헤더'처럼 흔한 낱말은 넣지 않는다 — Whisper 가 거의 틀리지
 #   않아서 분모만 불려 오인식률을 실제보다 낮게 보이게 한다.
-# 오답 열: Whisper 가 실제로 쓴 표기. 여기 적힌 표기가 전사문에서 발견되면
-#   .review.jsonl 에 term_miss 플래그가 붙는다. 교정하면서 직접 채운다 —
-#   실제 출력에서만 나오는 정보라 추측으로 채우면 플래그가 거짓말을 한다.
-#   지금 들어 있는 3건은 기존 전사문에서 직접 관찰한 표기다.
+# 오답 열: Whisper 가 실제로 쓴 표기. 전사 스크립트가 이 표기를 정답 용어로 치환하고
+#   (textnorm.replace_guarded), 남은 것은 .review.jsonl 에 term_miss 플래그로 붙는다.
+#   교정과 격주 채굴(README 「정기 점검」)에서 확정한 것만 채운다 —
+#   실제 출력에서만 나오는 정보라 추측으로 채우면 치환과 플래그가 거짓말을 한다.
 #
 # 앞쪽 30개가 2차 디코딩 initial_prompt 로 들어간다(224 토큰 제한).
 # 과목이 잡히지 않는 측정용 발췌 실행에서는 과목 ID 와 무관하게 전체가 로드되므로
