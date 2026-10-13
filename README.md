@@ -12,7 +12,7 @@
 
 - **엔진**: mlx-whisper large-v3 그리디 + 반복 필터 + 용어 치환 (소유자 결정 2026-10-13)
 - **녹음**: 아이폰 한 대, 음성분리 끔, 자동 모드 (2026-09-30 판정)
-- **다음 레버**: 용어 채굴·치환 강화 (LLM 후편집은 `scripts/post_edit.py` 도구로만)
+- **다음 레버**: 용어 채굴·치환 강화 (LLM 후편집은 강의 정리 스킬과 중복이라 쓰지 않음)
 
 근거 수치는 [`docs/summary.md`](docs/summary.md), 측정 원기록은 `results/2026-09-baseline.md`.
 
@@ -163,7 +163,7 @@ uv run scripts/run_report.py
 |---|---|
 | `scripts/snr_probe.py <파일\|폴더> …` | 녹음을 말소리 대 바닥 소음(dB)으로 정렬 — 발췌 표본 고르기. 잔향은 재지 않음 |
 | `scripts/judge_sheet.py make\|score <stem>…` | 두 전사가 다른 구간만 나란히 놓은 판정표를 만들고(`data/judge/`), 들은 판정으로 승률·CER 을 냄 — 정답본 편향 없이 엔진 비교 |
-| `scripts/post_edit.py <전사문.md> ["과목 ID"]` | 치환 뒤 남은 오인식을 Claude(`claude -p`, 기본 Sonnet low, 도구 없음)가 고침. 원본은 두고 `.post.md` 와 변경 이력 `.post.tsv` 를 씀. 블록 안에서 한 번만 나오는 조각만 바꿈 |
+| `scripts/post_edit.py <전사문.md> ["과목 ID"]` | (측정 재현용 — 운영에서 쓰지 않음) 치환 뒤 남은 오인식을 Claude(`claude -p`, 기본 Sonnet low, 도구 없음)가 고침. 원본은 두고 `.post.md` 와 변경 이력 `.post.tsv` 를 씀. 블록 안에서 한 번만 나오는 조각만 바꿈 |
 | `scripts/device_diff.py` | 같은 강의를 두 기기로 녹음한 전사의 차이 구간 목록 (기기 쌍 비교) |
 | `python3.14 scripts/clip_check.py check\|recut <폴더>` | 검증 클립에 대상 단어가 실제로 들었는지 확인하고 다시 자름 |
 | `python3.14 scripts/recheck_replay.py` | `--recheck` 단계만 다른 설정으로 다시 돌려 비교 |
