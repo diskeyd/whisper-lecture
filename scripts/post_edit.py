@@ -1,7 +1,7 @@
 """Fix misrecognitions left after term replacement, with an LLM reading the text only.
 
 Usage:
-  uv run scripts/post_edit.py <transcript.md> ["<course id>"] [--model opus]
+  uv run scripts/post_edit.py <transcript.md> ["<course id>"] [--model opus] [--effort medium]   # default: sonnet, low
 
 Writes <stem>.post.md next to the input and <stem>.post.tsv with every proposed
 edit (block, from, to, reason, applied?). The input is never touched.
@@ -66,9 +66,9 @@ def split_blocks(text):
     return out
 
 
-def ask(prompt, model):
+def ask(prompt, model, effort):
     run = subprocess.run(
-        ["claude", "-p", "--model", model, "--tools", "", "--no-session-persistence"],
+        ["claude", "-p", "--model", model, "--effort", effort, "--tools", "", "--no-session-persistence"],
         input=prompt, capture_output=True, text=True, cwd=tempfile.gettempdir(), timeout=900, check=False,
     )
     if run.returncode:
@@ -82,7 +82,9 @@ def apply(blocks, edits):
     by_stamp = {b[0]: b for b in blocks}
     rows = []
     for e in edits:
-        at, old, new = str(e.get("at", "")), str(e.get("from", "")), str(e.get("to", ""))
+        # models write "0:00" or the whole "0:00 - 1:00" header; both name the same block
+        at = str(e.get("at", "")).strip("* ").split(" - ")[0]
+        old, new = str(e.get("from", "")), str(e.get("to", ""))
         block = by_stamp.get(at)
         ok = block is not None and old and old != new and block[2].count(old) == 1
         if ok and block is not None:
@@ -91,7 +93,7 @@ def apply(blocks, edits):
     return rows
 
 
-def post_edit(path, course="", model="opus"):
+def post_edit(path, course="", model="sonnet", effort="low", tag="post"):
     path = Path(path)
     blocks = split_blocks(path.read_text(encoding="utf-8"))
     terms = sorted({c for c, _ in load_glossary(REPO / "glossary" / "terms.tsv", course or None)})
@@ -99,25 +101,26 @@ def post_edit(path, course="", model="opus"):
     rows = []
     for i in range(0, len(blocks), CHUNK):
         part = blocks[i:i + CHUNK]
-        rows += apply(part, ask(rules + "".join(h + b for _, h, b in part), model))
+        rows += apply(part, ask(rules + "".join(h + b for _, h, b in part), model, effort))
     stem = path.name.removesuffix(".md")
-    path.with_name(stem + ".post.md").write_text("".join(h + b for _, h, b in blocks), encoding="utf-8")
+    path.with_name(stem + f".{tag}.md").write_text("".join(h + b for _, h, b in blocks), encoding="utf-8")
     table = ["block\tfrom\tto\twhy\tstatus"] + ["\t".join(r) for r in rows]
-    path.with_name(stem + ".post.tsv").write_text("\n".join(table) + "\n", encoding="utf-8")
+    path.with_name(stem + f".{tag}.tsv").write_text("\n".join(table) + "\n", encoding="utf-8")
     done = sum(r[4] == "applied" for r in rows)
-    print(f"{path.name}: {done} applied, {len(rows) - done} skipped → {stem}.post.md")
+    print(f"{path.name}: {done} applied, {len(rows) - done} skipped → {stem}.{tag}.md")
 
 
 def main():
     args = sys.argv[1:]
-    model = "opus"
-    if "--model" in args:
-        i = args.index("--model")
-        model = args[i + 1]
-        del args[i:i + 2]
+    opts = {"--model": "sonnet", "--effort": "low"}  # as good as opus on the five golds, 2026-10-13
+    for flag in opts:
+        if flag in args:
+            i = args.index(flag)
+            opts[flag] = args[i + 1]
+            del args[i:i + 2]
     if not args:
         raise SystemExit(__doc__)
-    post_edit(args[0], args[1] if len(args) > 1 else "", model)
+    post_edit(args[0], args[1] if len(args) > 1 else "", opts["--model"], opts["--effort"])
 
 
 if __name__ == "__main__":
