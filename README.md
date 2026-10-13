@@ -11,7 +11,8 @@
 ## 현재 결론 (2026-10-13)
 
 - **엔진은 mlx-whisper large-v3 그리디 + 반복 필터 + 용어 치환을 유지합니다.** 무료로 쓸 수 있는 다른 엔진·전처리
-  (Qwen3-ASR, WPE 잔향 제거, 빔서치, 잡음 제거, turbo)는 같은 정답본에서 모두 졌습니다 — 요약은
+  (Qwen3-ASR, WPE 잔향 제거, 빔서치, 잡음 제거, turbo)는 같은 정답본에서 모두 졌습니다. 단 Qwen3-ASR 은 정답본 없이
+  들어서 가린 비교에서 오히려 앞서(10/13), 재검토 중입니다 — 요약은
   [`docs/2026-10-engine-comparison.md`](docs/2026-10-engine-comparison.md), 원기록은 `results/2026-09-baseline.md`.
 - **녹음은 아이폰 한 대, 음성분리 끔, 자동 모드**입니다(기기 쌍 1~3차, 2026-09-30 판정).
 - 품질을 더 올리는 길은 녹음 위치, 용어 치환·채굴, LLM 후편집입니다.
@@ -163,6 +164,7 @@ uv run scripts/run_report.py
 | 스크립트 | 용도 |
 |---|---|
 | `scripts/snr_probe.py <파일\|폴더> …` | 녹음을 말소리 대 바닥 소음(dB)으로 정렬 — 발췌 표본 고르기. 잔향은 재지 않음 |
+| `scripts/judge_sheet.py make\|score <stem>…` | 두 전사가 다른 구간만 나란히 놓은 판정표를 만들고(`data/judge/`), 들은 판정으로 승률·CER 을 냄 — 정답본 편향 없이 엔진 비교 |
 | `scripts/device_diff.py` | 같은 강의를 두 기기로 녹음한 전사의 차이 구간 목록 (기기 쌍 비교) |
 | `python3.14 scripts/clip_check.py check\|recut <폴더>` | 검증 클립에 대상 단어가 실제로 들었는지 확인하고 다시 자름 |
 | `python3.14 scripts/recheck_replay.py` | `--recheck` 단계만 다른 설정으로 다시 돌려 비교 |
@@ -174,7 +176,7 @@ uv run pytest
 ```
 
 지표(`cer`, `term_error`, `textnorm`, 별칭, `replace_guarded`), `review_sheet`, `slice_transcript` 정렬,
-`mine_variants`, `fetch`, `clip_check`, `device_diff`, 그리고 전사 스크립트의 업로드·삭제 조건, 사이드카 경로,
+`mine_variants`, `fetch`, `clip_check`, `device_diff`, `judge_sheet`, 그리고 전사 스크립트의 업로드·삭제 조건, 사이드카 경로,
 파트 묶기·병합, `--plan` 을 덮습니다(전사 스크립트 테스트는 `mlx_whisper` 를 스텁으로 바꿔 끼웁니다).
 전사·반복 필터 본체, `fix_terms.py` CLI, `run_report.py`, `make_excerpt.py`, `snr_probe.py`, `recheck_replay.py` 는
 테스트가 없습니다.
