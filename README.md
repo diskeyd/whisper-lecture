@@ -10,12 +10,11 @@
 
 ## 현재 결론 (2026-10-13)
 
-- **엔진은 mlx-whisper large-v3 그리디 + 반복 필터 + 용어 치환을 유지합니다.** 무료로 쓸 수 있는 다른 엔진·전처리
-  (Qwen3-ASR, WPE 잔향 제거, 빔서치, 잡음 제거, turbo)는 같은 정답본에서 모두 졌습니다. 단 Qwen3-ASR 은 정답본 없이
-  들어서 가린 비교에서 오히려 앞서(10/13), 재검토 중입니다 — 요약은
-  [`docs/2026-10-engine-comparison.md`](docs/2026-10-engine-comparison.md), 원기록은 `results/2026-09-baseline.md`.
-- **녹음은 아이폰 한 대, 음성분리 끔, 자동 모드**입니다(기기 쌍 1~3차, 2026-09-30 판정).
-- 품질을 더 올리는 길은 녹음 위치, 용어 치환·채굴, LLM 후편집입니다.
+- **엔진**: mlx-whisper large-v3 그리디 + 반복 필터 + 용어 치환 (소유자 결정 2026-10-13)
+- **녹음**: 아이폰 한 대, 음성분리 끔, 자동 모드 (2026-09-30 판정)
+- **다음 레버**: LLM 후편집, 용어 채굴·치환 강화
+
+근거 수치는 [`docs/summary.md`](docs/summary.md), 측정 원기록은 `results/2026-09-baseline.md`.
 
 ## 왜 두 가지 파이썬을 쓰나
 
@@ -38,7 +37,7 @@
 | `--upload-only` | 전사를 건너뛰고 업로드·삭제만 (재시도용, 파트 병합도 하지 않음) |
 | `--dump-json` | 후처리 전 세그먼트를 `<stem>.whisper.json` 으로 남깁니다 |
 | `--recheck` | 저신뢰 구간을 2차 디코딩해 사이드카에 `disagree` 로 대조 (기본 꺼짐) |
-| `--carry-context`, `--seed-glossary` | 창 간 문맥 유지, 용어집 프롬프트 (실험용 — 기준선에서 기각) |
+| `--carry-context`, `--seed-glossary` | 창 간 문맥 유지, 용어집 프롬프트 (실험용 — 둘을 함께 쓴 설정은 기각, `--seed-glossary` 단독은 미측정) |
 | `--plan` | 과목·저장 폴더·업로드 여부만 JSON 줄로 출력. 오디오를 건드리지 않고 mlx 도 필요 없습니다 |
 
 음성메모는 앱에서 `~/Downloads` 로 끌어다 놓고 경로를 넘깁니다 (터미널에 전체 디스크 접근 권한을 주지 않기 위해
@@ -73,7 +72,7 @@ uv run scripts/fetch.py s1-261 <folder_id> "260512 컴퓨터네트워크w11-1.m4
 # 2. 분 경계에서 5분 발췌 (ffprobe 로 300초 확인, 어긋나면 재인코딩)
 uv run scripts/make_excerpt.py s1-261 48
 
-# 3. 현재 파이프라인으로 재전사 — --no-upload 필수 (사이드카는 data/review/<stem>.review.jsonl)
+# 3. 현재 파이프라인으로 재전사 — --no-upload 필수 (사이드카는 data/review/s1-261.current.review.jsonl)
 cp data/excerpt/s1-261.excerpt.m4a data/hyp/s1-261.current.m4a
 python3.14 transcribe_whisper.py --no-upload --dump-json \
     data/hyp/s1-261.current.m4a </dev/null
@@ -104,9 +103,9 @@ uv run scripts/term_error.py data/gold/s1-261.md data/hyp/s1-261.current.md "201
 정답본을 LLM 으로 만들거나 초안을 LLM 으로 미리 고치지 마세요. 모델이 만든 정답으로 재면
 정확도가 아니라 **모델끼리의 일치도**를 재게 됩니다.
 
-정답본은 출발한 초안 쪽에 유리합니다(고치는 사람은 들리는 대로 맞으면 그대로 둡니다). s1~s3 는 whisper 초안에서
-출발했으므로, 편향 확인용 s4-oss·s5-crypto 는 **Qwen3-ASR 초안**에서 출발합니다 — 이 둘을 교정할 때는
-whisper 출력(`data/hyp/<stem>.current.md`)을 열지 마세요.
+정답본은 출발한 초안 쪽에 유리합니다(고치는 사람은 들리는 대로 맞으면 그대로 둡니다). s1~s3 는 whisper 초안,
+s4-oss·s5-crypto 는 Qwen3-ASR 초안에서 출발했습니다. 그래서 **엔진끼리 비교할 때는 정답본 CER 대신**
+`scripts/judge_sheet.py` 로 두 전사가 다른 구간만 들어서 가립니다.
 
 플래그가 없는 구간도 읽어야 합니다. `avg_logprob`·`no_speech_prob` 는 세그먼트가 아니라
 30초 디코딩 창 단위 값이고, 확신에 찬 오인식(예: "스택 카나리" → "스택 하나리",
@@ -130,12 +129,11 @@ done
 uv run scripts/run_report.py
 ```
 
-후보의 절반가량은 오탐입니다(2026-09-22 실측 48%). **귀가 아니라 강의자료로 판정합니다** —
+후보의 절반가량은 오탐입니다. **귀가 아니라 강의자료로 판정합니다** —
 볼트 `50. Assets/<과목>/*.pdf` 를 `pdftotext` 로 뽑아 문자열 대조하고, 애매하면 NotebookLM 에
 원문 인용을 요구합니다. **NLM 답은 그 인용이 함께 돌려준 근거 조각(`references[].cited_text`)에
 실제로 있을 때만 씁니다** — NLM 은 시각이 아니라 내용으로 원문을 찾으므로 "몇 분 몇 초에 뭐라고 했나"
-는 묻지 말고 "이런 내용이 나오는 대목"으로 묻습니다(2026-09-23 실측: 내용 질문 인용 81% 일치,
-시각 질문 0/3). whisper 와 NLM 이 같은 답인데 강의자료와 다르면 둘 다 틀린 것일 수 있으니 소유자가
+는 묻지 말고 "이런 내용이 나오는 대목"으로 묻습니다(시각 질문은 실측에서 맞힌 적이 없습니다). whisper 와 NLM 이 같은 답인데 강의자료와 다르면 둘 다 틀린 것일 수 있으니 소유자가
 정합니다. 확정한 것만 `glossary/terms.tsv` **오답 열**에, 그 후보가 나온 **과목 범위**로
 넣습니다(`aliases.tsv` 아님). 그다음 `uv run scripts/fix_terms.py --write <폴더>` 로 볼트에 소급합니다.
 `fix_terms.py` 는 과목 범위를 보지 않고 전체 용어집을 폴더에 적용하므로, **폴더는 과목별로 넘기고 `--write` 전에

@@ -1491,7 +1491,7 @@ def main():
         print(
             "Usage: python3.14 transcribe_whisper.py "
             "[--dump-json] [--no-upload] [--keep-audio] [--upload-only] [--recheck] "
-            "[--carry-context] [--seed-glossary] "
+            "[--carry-context] [--seed-glossary] [--plan] "
             "<audio.m4a> [audio2.m4a ...]"
         )
         sys.exit(1)
