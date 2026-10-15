@@ -14,6 +14,7 @@ Usage (mlx-whisper 는 brew python@3.14 에만 있다 — 기본 python3 은 3.1
   python3.14 transcribe_whisper.py "~/Downloads/260303 컴퓨터네트워크w1-1.m4a"
   python3.14 transcribe_whisper.py "<제목>(1).m4a" "<제목>(2).m4a"  # 나뉜 녹음 → <제목>.m4a 로 병합해 한 번 전사
                                                         #   (업로드 뒤 병합본과 함께 파트도 삭제)
+  python3.14 transcribe_whisper.py --no-merge "<제목>(1).m4a"   # 나뉜 녹음도 병합·경고 없이 파일마다 따로 전사 (<제목>(1).md)
   python3.14 transcribe_whisper.py --dump-json <audio>   # 후처리 전 Whisper 세그먼트 JSON 보존(디버그)
   python3.14 transcribe_whisper.py --no-upload <audio>   # 전사만 (업로드·삭제 없음)
   python3.14 transcribe_whisper.py --keep-audio <audio>  # 업로드는 하되 원본은 남김
@@ -1237,16 +1238,16 @@ def route(input_path):
     return None, input_path.parent
 
 
-def plan_rows(args):
+def plan_rows(args, no_merge=False):
     """What a run would do with each recording, touching no audio and creating nothing.
 
     One dict per transcript: split parts passed together count as their merged file, named as
     merge_split_recordings names it. notebook says whether the uploads would be tried; it is
     None when the Subject notes cannot be listed, so an unreadable vault never reads as
-    "no notebook".
+    "no notebook". no_merge: one row per path, parts never grouped.
     """
     paths = {unicodedata.normalize("NFC", Path(a).expanduser().stem): a for a in args}
-    groups, _ = group_split_parts(list(paths), [])
+    groups = [(s, [s]) for s in paths] if no_merge else group_split_parts(list(paths), [])[0]
     try:
         next(SUBJECT_DIR.iterdir(), None)
         readable = True
@@ -1474,6 +1475,7 @@ def main():
         "--carry-context": False,
         "--seed-glossary": False,
         "--plan": False,
+        "--no-merge": False,
     }
     for flag in flags:
         if flag in args:
@@ -1481,7 +1483,7 @@ def main():
     args = [a for a in args if a not in flags]
     if flags["--plan"]:
         # One JSON line per transcript (plan_rows); ASCII so a caller's locale cannot garble names.
-        for row in plan_rows(args):
+        for row in plan_rows(args, no_merge=flags["--no-merge"]):
             print(json.dumps(row, ensure_ascii=True))
         return
     if flags["--upload-only"] and flags["--no-upload"]:
@@ -1491,7 +1493,7 @@ def main():
         print(
             "Usage: python3.14 transcribe_whisper.py "
             "[--dump-json] [--no-upload] [--keep-audio] [--upload-only] [--recheck] "
-            "[--carry-context] [--seed-glossary] [--plan] "
+            "[--carry-context] [--seed-glossary] [--plan] [--no-merge] "
             "<audio.m4a> [audio2.m4a ...]"
         )
         sys.exit(1)
@@ -1520,7 +1522,7 @@ def main():
         input_paths.append(p)
 
     parts_of = {p: [p] for p in input_paths}
-    if not flags["--upload-only"]:
+    if not (flags["--upload-only"] or flags["--no-merge"]):
         parts_of = merge_split_recordings(input_paths)
         input_paths = list(parts_of)
 
