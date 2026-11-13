@@ -38,6 +38,7 @@ def test_main_skips_the_merge_step(tmp_path, monkeypatch, extra):
     part.write_bytes(b"")
     sibling.write_bytes(b"")
     seen = []
+    monkeypatch.setattr(tw, "SUBJECT_DIR", tmp_path / "subjects")  # uploading runs need the vault set
 
     def no_merge_allowed(paths):
         raise AssertionError("merge_split_recordings called")

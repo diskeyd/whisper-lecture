@@ -28,10 +28,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from textnorm import load_body, normalize
+from whisper_config import path as config_path
 
-VAULT = Path(
-    "<WIKI_VAULT>"
-)
+VAULT = config_path("WHISPER_WIKI_VAULT")  # env var or local/config.toml
 SOURCES = VAULT / "10. Raw Sources"
 HYP = Path(__file__).resolve().parent.parent / "data" / "hyp"
 MIN_ANCHOR = 12  # a matching run shorter than this is coincidence, not alignment

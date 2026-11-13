@@ -1,0 +1,15 @@
+# Settings that belong to one machine. Copy this file to local/config.toml
+# (the local/ folder is git-ignored), or export the matching environment variable
+# instead. An environment variable wins over the file.
+
+# WHISPER_VAULT: the vault whose "30. Permanent Notes" folder holds the Subject notes
+# (transcribe_whisper.py reads each course's NotebookLM notebook id from them).
+vault = "/path/to/main-vault"
+
+# WHISPER_WIKI_VAULT: the vault whose "10. Raw Sources/<course id>/" folders receive
+# the transcripts (also read by scripts/slice_transcript.py).
+wiki_vault = "/path/to/wiki-vault"
+
+# WHISPER_DRIVE_FOLDER_ID: the Google Drive folder the recordings are uploaded to.
+# Only needed for runs that upload (anything without --no-upload).
+drive_folder_id = "<DRIVE_FOLDER_ID>"

@@ -4,9 +4,16 @@ import sys
 import types
 from pathlib import Path
 
+import pytest
+
 sys.modules.setdefault("mlx_whisper", types.ModuleType("mlx_whisper"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import transcribe_whisper as tw
+
+
+@pytest.fixture(autouse=True)
+def files_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(tw, "FILES_ROOT", tmp_path / "raw")
 
 
 def test_vault_and_repo_runs_share_one_flat_dir():

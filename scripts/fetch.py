@@ -21,8 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RAW = ROOT / "data" / "raw"
 MANIFEST = ROOT / "data" / "manifest.json"
 
-# Mirrors COURSE_MAP in ../transcribe_whisper.py (checked 2026-09-22; the old
-# ~/VScode/Python/ path and the symlink that stood in for it are both gone).
+# Mirrors COURSE_MAP in ../transcribe_whisper.py (checked 2026-09-22).
 COURSE_KEYWORDS = [
     "네트워크보안", "데이터통신", "시스템보안", "컴퓨터네트워크", "컴퓨터구조",
     "데이터베이스", "정보보호", "컴퓨터과학개론", "보안기술최신동향", "산학프로젝트",

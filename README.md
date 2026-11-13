@@ -27,6 +27,22 @@
 `pyproject.toml` 에 `mlx-whisper` 를 추가하지 마세요. 전사 스크립트는 이 레포에 있지만
 레포의 venv 와는 무관하게 돌아갑니다 (ruff 검사에서도 제외되어 있습니다).
 
+## 설정 — 이 컴퓨터에만 있는 값
+
+볼트 폴더와 Drive 폴더 id 는 코드에 두지 않습니다. 환경변수나 `local/config.toml` 에서 읽습니다.
+`config.example.toml` 을 `local/config.toml` 로 복사해 채웁니다 (`local/` 은 gitignore 입니다).
+둘 다 있으면 환경변수가 이깁니다.
+
+| 환경변수 | `config.toml` 키 | 쓰임 |
+|---|---|---|
+| `WHISPER_VAULT` | `vault` | 메인 볼트. `30. Permanent Notes/` 의 Subject 노트에서 과목별 NotebookLM 노트북 id 를 읽습니다 |
+| `WHISPER_WIKI_VAULT` | `wiki_vault` | 전사문을 쌓는 볼트. `10. Raw Sources/<과목 ID>/` 아래에 저장합니다 (`scripts/slice_transcript.py` 도 여기서 읽습니다) |
+| `WHISPER_DRIVE_FOLDER_ID` | `drive_folder_id` | 녹음을 올릴 Drive 폴더 id. 업로드하는 실행에만 필요합니다 |
+
+측정 도구(`cer.py`, `term_error.py` 등)와 테스트는 설정 없이 돕니다. 전사 스크립트는 값이 필요한 자리에서
+변수 이름을 알려 주고 멈춥니다. 업로드하는 실행은 시작할 때 `WHISPER_VAULT` 를 확인합니다. Drive id 만 없으면
+그 업로드가 실패로 기록되고 원본은 지워지지 않습니다.
+
 ### `transcribe_whisper.py` 플래그
 
 | 플래그 | 하는 일 |
@@ -42,11 +58,11 @@
 | `--no-merge` | 나뉜 녹음도 병합하지 않고 파일마다 따로 전사합니다 (`제목(1).md`, `제목(2).md`). `--plan` 과 함께 쓰면 파일마다 한 줄 |
 
 음성메모는 앱에서 `~/Downloads` 로 끌어다 놓고 경로를 넘깁니다 (터미널에 전체 디스크 접근 권한을 주지 않기 위해
-목록 자동 읽기는 쓰지 않습니다 — 그 버전은 `voice-memo-picker` 브랜치에 보관). 녹음이 `제목(1)`·`제목(2)` 로 나뉘었으면
+음성메모 목록을 자동으로 읽지 않습니다). 녹음이 `제목(1)`·`제목(2)` 로 나뉘었으면
 함께 넘기면 `제목.m4a` 로 병합해 한 번만 전사합니다. 파트는 **병합본이 지워졌을 때만**(Drive 업로드 성공 + NotebookLM
 준비 완료) 함께 지웁니다 — `--no-upload`·`--keep-audio` 이거나 노트북이 없는 과목이면 병합본과 파트가 모두 남습니다.
 한쪽만 넘기면 같은 폴더의 나머지 파트를 알려 주고 진행 여부를 묻습니다. `--no-merge` 를 주면 병합도 이 확인도 없이
-파트마다 따로 전사하고(`제목(1).md`), 지우는 규칙은 파일 하나일 때와 같습니다(각 파트는 자기만 지움). cc-dispatch 봇은 항상
+파트마다 따로 전사하고(`제목(1).md`), 지우는 규칙은 파일 하나일 때와 같습니다(각 파트는 자기만 지움). 자동 호출(디스패치 봇 등)은 항상
 `--no-merge` 로 돌립니다. 음성메모 앱의 녹음은 직접 지웁니다.
 
 ## 지표
@@ -69,7 +85,7 @@
 ## 절차
 
 ```bash
-# 1. Drive 에서 원본 1개 받기 (stem 은 과목 키워드를 피한 ASCII)
+# 1. Drive 에서 원본 1개 받기 (stem 은 과목 키워드를 피한 ASCII, folder_id 는 위 설정의 Drive 폴더 id)
 uv run scripts/fetch.py s1-261 <folder_id> "260512 컴퓨터네트워크w11-1.m4a"
 
 # 2. 분 경계에서 5분 발췌 (ffprobe 로 300초 확인, 어긋나면 재인코딩)
@@ -120,7 +136,7 @@ s4-oss·s5-crypto 는 Qwen3-ASR 초안에서 출발했습니다. 그래서 **엔
 
 ```bash
 cd whisper-lecture
-V="<WIKI_VAULT>/10. Raw Sources"
+V="<wiki_vault>/10. Raw Sources"   # 위 설정의 wiki_vault
 
 # 1. 최근 14일 전사문에서 깨진 용어 후보 (과목별로 그 과목 용어집 기준)
 for d in "$V"/201.*/; do

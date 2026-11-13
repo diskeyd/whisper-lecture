@@ -32,8 +32,6 @@ Usage (mlx-whisper 는 brew python@3.14 에만 있다 — 기본 python3 은 3.1
 이력: Apple 내장 DictationTranscriber를 "심판"으로 병렬 실행하는 Tier 2가 있었으나
       실효가 거의 없고(+25~36% 소요) 소스(apple_stt.swift)도 유실되어 2026-09-01 제거했습니다.
       측정 근거·설계 원칙·튜닝 값은 아래에 보존되어 있습니다.
-        - a private measurement note (not published)
-        - a private accuracy guide (not published)
 """
 
 import re
@@ -46,6 +44,9 @@ import mimetypes
 import subprocess
 import unicodedata
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
+import whisper_config as cfg  # noqa: E402
 
 if __name__ == "__main__" and "--plan" in sys.argv[1:]:
     # --plan never transcribes, and importing mlx initialises Metal (slow, and fails without
@@ -65,10 +66,10 @@ except ImportError:
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
+# Paths and ids that belong to one machine come from the environment or local/config.toml
+# (scripts/whisper_config.py); nothing here is hard-coded.
 # Raw lecture transcripts are RAW sources → LLM-Wiki satellite vault (main vault = curated markdown only)
-VAULT_ROOT = Path(
-    "<WIKI_VAULT>"
-)
+VAULT_ROOT = cfg.path("WHISPER_WIKI_VAULT")
 FILES_ROOT = VAULT_ROOT / "10. Raw Sources"
 
 COURSE_MAP = {
@@ -99,11 +100,9 @@ DEFAULT_LANGUAGE = "ko"
 # 원본 오디오 목적지 ─ Drive는 평평한 단일 폴더(기존 수동 업로드와 같은 자리),
 # NotebookLM은 과목별 노트북. 노트북 UUID의 정본은 메인 볼트 Subject 노트의
 # `- **NotebookLM**:: [NotebookLM](https://notebooklm.google.com/notebook/<uuid>)` 인라인 필드다.
-MAIN_VAULT_ROOT = Path(
-    "<VAULT>"
-)
+MAIN_VAULT_ROOT = cfg.path("WHISPER_VAULT")
 SUBJECT_DIR = MAIN_VAULT_ROOT / "30. Permanent Notes"
-DRIVE_FOLDER_ID = "<DRIVE_FOLDER_ID>"  # 강의녹음 폴더
+DRIVE_FOLDER_ID = cfg.get("WHISPER_DRIVE_FOLDER_ID")  # 강의녹음 폴더, 없으면 None
 
 # NotebookLM 업로드용 MIME. 확장자 추론이 .m4a를 놓치는 경우가 있어 직접 못박는다
 # (2026-09-09 실측: audio/mp4로 올린 m4a가 type=media/status=ready로 처리됨).
@@ -165,7 +164,7 @@ RECHECK_MIN_DURATION = 1.0  # 이보다 짧은 구간은 재디코딩해도 신�
 RECHECK_MAX_SEGMENTS = 200  # 2차 디코딩 상한 — 플래그가 폭주해도 시간이 터지지 않게
 RECHECK_PAD_SECONDS = 0.5  # 앞뒤 여유 — 경계에서 음절이 잘리는 것 방지
 RECHECK_TEMPERATURE = 0.2  # 1차(그리디)와 다른 조건으로 디코딩해야 대조가 된다
-GLOSSARY_PATH = Path.home() / "VScode/whisper-lecture/glossary/terms.tsv"
+GLOSSARY_PATH = Path(__file__).resolve().parent / "glossary" / "terms.tsv"
 GLOSSARY_PROMPT_TERMS = 30  # initial_prompt는 224토큰 제한이라 용어 수를 제한한다
 MAX_REPEATED_SEGMENTS = (
     2  # 동일 텍스트 세그먼트의 연속 '추가' 허용 횟수 — 원본 1개 + 2개 = 3개까지 남긴다
@@ -532,6 +531,8 @@ def drive_existing_id(name):
 
 def upload_to_drive(path, retry=True):
     """Drive 강의녹음 폴더에 올립니다. (file_id, 메모) / 실패 시 (None, 사유)."""
+    if not DRIVE_FOLDER_ID:
+        return None, cfg.missing_message("WHISPER_DRIVE_FOLDER_ID")
     existing = drive_existing_id(path.name)
     if existing:
         return existing, "이미 있음"
@@ -1000,7 +1001,7 @@ def glossary_prompt(entries):
 # 이하는 조사나 동반어가 붙어야, 3음절 이상은 다른 낱말에 붙지만 않으면 치환하고,
 # 라틴 표기는 뒤에 영숫자가 오면 건너뛴다. 규칙과 회귀 테스트는
 # scripts/fix_terms.py 와 tests/ 에 있다.
-ALIASES_PATH = Path.home() / "VScode/whisper-lecture/glossary/aliases.tsv"
+ALIASES_PATH = Path(__file__).resolve().parent / "glossary" / "aliases.tsv"
 
 
 def _replace_guarded():
@@ -1251,7 +1252,7 @@ def plan_rows(args, no_merge=False):
     try:
         next(SUBJECT_DIR.iterdir(), None)
         readable = True
-    except OSError:
+    except (OSError, cfg.ConfigError):
         readable = False
     rows = []
     for name, stems in groups:
@@ -1498,10 +1499,21 @@ def main():
         )
         sys.exit(1)
 
+    # 업로드하는 실행은 Subject 노트에서 NotebookLM 노트북을 찾는다 — 전사를 마친 뒤에 설정 누락으로
+    # 멈추지 않도록 시작할 때 확인한다.
+    if not flags["--no-upload"] and isinstance(SUBJECT_DIR, cfg.UnsetPath):
+        print(cfg.missing_message("WHISPER_VAULT"))
+        sys.exit(1)
+
     # ffmpeg, ffprobe는 전사에만 필요 (업로드용 gws/notebooklm은 선택 — 없으면 그 단계만 실패로 보고)
     if not flags["--upload-only"]:
         check_dependencies()
     if not flags["--no-upload"]:
+        if not DRIVE_FOLDER_ID:
+            print(
+                "⚠️  WHISPER_DRIVE_FOLDER_ID 없음 — Drive 업로드는 실패로 기록되고 원본은 삭제되지 않습니다 "
+                "(환경변수 또는 local/config.toml, config.example.toml 참고)."
+            )
         for tool in ["gws", "notebooklm"]:
             if not shutil.which(tool):
                 print(
